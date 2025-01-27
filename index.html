@@ -23,7 +23,10 @@
     
     <div id="keyboardContainer"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.15/dist/modules/libsodium-wrappers.min.js"></script>
+    <script type="module">
+    import sodium from 'https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.15/+esm'
+    window.sodium = sodium
+    </script>
     <script>
       const leftLayout = {
         rows: [["#", "T", "P", "H"], ["S", "K", "W", "R"]],
@@ -61,7 +64,7 @@
               const serverPublicKey = data;
               ws.send(clientKeys.publicKey);
 
-              const [clientRx, clientTx] = sodium.crypto_kx_client_session_keys(
+              const {sharedRx: clientRx, sharedTx: clientTx} = sodium.crypto_kx_client_session_keys(
                 clientKeys.publicKey, clientKeys.privateKey, serverPublicKey
               );
 
@@ -176,12 +179,12 @@
         ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(event => {
           document.addEventListener(event, e => {
             if (event === 'touchstart' || event === 'touchmove') {
-              e.touches.forEach(touch => {
+              [...e.touches].forEach(touch => {
                 touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
               });
             }
             if (event === 'touchend' || event === 'touchcancel') {
-              e.changedTouches.forEach(touch => delete touches[touch.identifier]);
+              [...e.changedTouches].forEach(touch => delete touches[touch.identifier]);
             }
             updateKeyStates();
             e.preventDefault();
