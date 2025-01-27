@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
+    <title>Steno Keyboard</title>
+    <style>body { user-select: none; }</style>
+  </head>
+  <body>
+    <script>
+    const isLeft = location.hash !== "#R";
+    const leftLayout = {
+      rows: [["#", "T", "P", "H"], ["S", "K", "W", "R"]],
+      vowels: ["A", "O"]
+    };
+    const rightLayout = {
+      rows: [["F", "P", "L", "T", "D"], ["R", "B", "G", "S", "Z"]],
+      vowels: ["E", "U"]
+    };
+    const width = 100; 
+    const height = 100;
+
+    const keys = []; // Store key elements and their bounding boxes
+    const touches = {}; // Track active touches
+
+    const key = (letter) => {
+      const element = document.createElement("div");
+      element.textContent = letter;
+      element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${height}px; text-align: center; line-height: ${height}px;`;
+      keys.push({ letter, element });
+      return element;
+    };
+
+    const doubleHeight = (letter) => {
+      const element = document.createElement("div");
+      element.textContent = letter;
+      element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${2 * height + 10}px; text-align: center; line-height: ${2 * height}px;`;
+      keys.push({ letter, element });
+      return element;
+    };
+
+    const currentLayout = isLeft ? leftLayout : rightLayout;
+    const parent = document.createElement("div");
+    parent.style.cssText = "display: flex; flex-direction: row;";
+    parent.style.cssText += isLeft ? " margin-left: 110px;" : " position: absolute; right: 30px;";
+
+    const beforeStar = document.createElement("div");
+    for (const row of currentLayout.rows) {
+      for (const letter of row)
+        beforeStar.appendChild(key(letter));
+      beforeStar.appendChild(document.createElement("br"));
+    }
+
+    if (!isLeft) parent.appendChild(doubleHeight("*"));
+    parent.appendChild(beforeStar);
+    if (isLeft) parent.appendChild(doubleHeight("*"));
+    document.body.appendChild(parent);
+
+    const vowels = document.createElement("div");
+    vowels.style.cssText = "position: absolute; " + (isLeft ? "bottom: 0; right: 0;" : "bottom: 0; left: 0;");
+    for (const vowel of currentLayout.vowels)
+      vowels.appendChild(key(vowel));
+    document.body.appendChild(vowels);
+
+    // Detect intersection between a circle and a rectangle
+    const intersects = (circle, rect) => {
+      const circleDistX = Math.abs(circle.x - rect.x - rect.width / 2);
+      const circleDistY = Math.abs(circle.y - rect.y - rect.height / 2);
+
+      if (circleDistX > (rect.width / 2 + circle.radius) || circleDistY > (rect.height / 2 + circle.radius)) {
+        return false;
+      }
+
+      if (circleDistX <= (rect.width / 2) || circleDistY <= (rect.height / 2)) {
+        return true;
+      }
+
+      const cornerDistanceSq = Math.pow(circleDistX - rect.width / 2, 2) +
+                               Math.pow(circleDistY - rect.height / 2, 2);
+
+      return cornerDistanceSq <= Math.pow(circle.radius, 2);
+    };
+
+    const updateKeyStates = () => {
+      for (const { letter, element } of keys) {
+        const rect = element.getBoundingClientRect();
+        const rectData = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+
+        let pressed = false;
+        for (const touch of Object.values(touches)) {
+          const circle = { x: touch.x, y: touch.y, radius: 20 };
+          if (intersects(circle, rectData)) {
+            pressed = true;
+            break;
+          }
+        }
+
+        if (pressed) {
+          if (!element.classList.contains("pressed")) {
+            if (navigator.vibrate) navigator.vibrate(100);
+            console.log(`${letter} pressed`);
+            element.classList.add("pressed");
+          }
+        } else {
+          if (element.classList.contains("pressed")) {
+            console.log(`${letter} released`);
+            element.classList.remove("pressed");
+          }
+        }
+      }
+    };
+
+    document.addEventListener("touchstart", (e) => {
+      for (const touch of e.touches) {
+        touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+      }
+      updateKeyStates();
+    });
+
+    document.addEventListener("touchmove", (e) => {
+      for (const touch of e.touches) {
+        touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+      }
+      updateKeyStates();
+    });
+
+    document.addEventListener("touchend", (e) => {
+      for (const touch of e.changedTouches) {
+        delete touches[touch.identifier];
+      }
+      updateKeyStates();
+    });
+
+    document.addEventListener("touchcancel", (e) => {
+      for (const touch of e.changedTouches) {
+        delete touches[touch.identifier];
+      }
+      updateKeyStates();
+    });
+
+    // Style for pressed keys
+    const style = document.createElement("style");
+    style.textContent = `.pressed { background-color: yellow; }`;
+    document.head.appendChild(style);
+    </script>
+  </body>
+</html>
