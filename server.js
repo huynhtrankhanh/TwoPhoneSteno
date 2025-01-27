@@ -51,21 +51,27 @@ const rl = readline.createInterface({
           );
           serverRx = rx;
 
-          // Ask for connection confirmation
-          const answer = await new Promise(resolve =>
-            rl.question('Accept connection? (y/n) ', resolve)
-          );
+          let connectionAccepted = false;
 
-          if (answer.toLowerCase() !== 'y') {
-            ws.close();
-            return;
-          }
+          // Ask for connection confirmation
+          rl.question('Accept connection? (y/n) ', answer => {
+            if (answer.toLowerCase() !== 'y') {
+              ws.close();
+            } else {
+              connectionAccepted = true;
+            }
+          })
 
           // Wait for encryption header
           ws.once('message', header => {
-            decryptState = sodium.crypto_secretstream_xchacha20poly1305_init_pull(
-              new Uint8Array(header), serverRx
-            );
+            try {
+              decryptState = sodium.crypto_secretstream_xchacha20poly1305_init_pull(
+                new Uint8Array(header), serverRx
+              );
+            } catch (error) {
+              console.log(error);
+              return;
+            }
 
             // Handle encrypted messages
             ws.on('message', ciphertext => {
@@ -74,6 +80,10 @@ const rl = readline.createInterface({
                   decryptState, new Uint8Array(ciphertext)
                 );
                 const event = JSON.parse(sodium.to_string(decrypted.message));
+                if (!connectionAccepted) {
+                  console.log("Event received but connection isn't accepted. Ignoring.");
+                  return;
+                }
                 console.log(`[${new Date().toISOString()}] ${event.half} ${event.letter} ${event.type}`);
               } catch (e) {
                 console.error('Decryption error:', e);
