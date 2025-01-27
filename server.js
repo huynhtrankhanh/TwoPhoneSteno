@@ -8,6 +8,27 @@ const net = require('net');
 const htmlContent = fs.readFileSync('./index.html', 'utf8');
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+// Queuing system for readline prompts
+const questionQueue = [];
+let isAsking = false;
+
+function enqueueQuestion(prompt, callback) {
+    questionQueue.push({ prompt, callback });
+    processQueue();
+}
+
+function processQueue() {
+    if (!isAsking && questionQueue.length > 0) {
+        isAsking = true;
+        const { prompt, callback } = questionQueue.shift();
+        rl.question(prompt, (answer) => {
+            callback(answer);
+            isAsking = false;
+            processQueue();
+        });
+    }
+}
+
 // Read Unix socket path from command line
 const socketPath = process.argv[2];
 if (!socketPath) {
@@ -105,10 +126,9 @@ function generateTxBoltBytes(currentStroke) {
 (async () => {
     await sodium.ready;
     const serverKeys = sodium.crypto_kx_keypair();
-
-    console.log('Server fingerprint:', sodium.to_base64(
+    const serverFingerprint = sodium.to_base64(
         sodium.crypto_generichash(32, serverKeys.publicKey)
-    ));
+    );
 
     const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -131,9 +151,9 @@ function generateTxBoltBytes(currentStroke) {
             try {
                 if (!clientPublicKey) {
                     clientPublicKey = new Uint8Array(message);
-                    console.log('Client fingerprint:', sodium.to_base64(
+                    const clientFingerprint = sodium.to_base64(
                         sodium.crypto_generichash(32, clientPublicKey)
-                    ));
+                    );
 
                     const { sharedRx: rx, sharedTx: tx } = sodium.crypto_kx_server_session_keys(
                         serverKeys.publicKey, serverKeys.privateKey, clientPublicKey
@@ -142,13 +162,18 @@ function generateTxBoltBytes(currentStroke) {
 
                     let connectionAccepted = false;
 
-                    rl.question('Accept connection? (y/n) ', answer => {
-                        if (answer.toLowerCase() !== 'y') {
-                            ws.close();
-                        } else {
-                            connectionAccepted = true;
+                    enqueueQuestion(
+                        `Server fingerprint: ${serverFingerprint}\n` +
+                        `Client fingerprint: ${clientFingerprint}\n` +
+                        'Accept connection? (y/n) ',
+                        answer => {
+                            if (answer.toLowerCase() !== 'y') {
+                                ws.close();
+                            } else {
+                                connectionAccepted = true;
+                            }
                         }
-                    });
+                    );
 
                     ws.once('message', header => {
                         try {
@@ -167,7 +192,7 @@ function generateTxBoltBytes(currentStroke) {
                                 );
                                 const event = JSON.parse(sodium.to_string(decrypted.message));
                                 if (!connectionAccepted) {
-                                    console.log("Event received but connection isn't accepted. Ignoring.");
+                                    console.log("Ignoring event - connection not accepted");
                                     return;
                                 }
                                 handleKeyEvent(event.letter, event.type, event.half);
