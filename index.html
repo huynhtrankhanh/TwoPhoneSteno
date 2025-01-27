@@ -4,145 +4,190 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
     <title>Steno Keyboard</title>
-    <style>body { user-select: none; }</style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/libsodium-wrappers/0.4.8/sodium.min.js" integrity="sha512-ZkDizppcYOuC7WUja5ADM1MFdbCisws4DeHkZo7K/JSPgfLia6AKim8B8Mos0bvQEW4byqWp+cc7zamkpLEW7g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+      body { user-select: none; }
+      #connectionUI { padding: 20px; }
+      #keyboardContainer { display: none; }
+      .pressed { background-color: yellow; }
+    </style>
   </head>
   <body>
+    <div id="connectionUI">
+      <input type="text" id="serverAddress" placeholder="ws://localhost:8080" style="width: 200px;"><br>
+      <div style="margin: 10px 0;">
+        <label><input type="radio" name="half" value="left" checked> Left Half</label>
+        <label><input type="radio" name="half" value="right"> Right Half</label>
+      </div>
+      <button id="connectBtn">Connect</button>
+    </div>
+    
+    <div id="keyboardContainer"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/libsodium-wrappers/0.4.8/sodium.min.js" integrity="sha512-ZkDizppcYOuC7WUja5ADM1MFdbCisws4DeHkZo7K/JSPgfLia6AKim8B8Mos0bvQEW4byqWp+cc7zamkpLEW7g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
-    const isLeft = location.hash !== "#R";
-    const leftLayout = {
-      rows: [["#", "T", "P", "H"], ["S", "K", "W", "R"]],
-      vowels: ["A", "O"]
-    };
-    const rightLayout = {
-      rows: [["F", "P", "L", "T", "D"], ["R", "B", "G", "S", "Z"]],
-      vowels: ["E", "U"]
-    };
-    const width = 100; 
-    const height = 100;
+      const leftLayout = {
+        rows: [["#", "T", "P", "H"], ["S", "K", "W", "R"]],
+        vowels: ["A", "O"]
+      };
+      
+      const rightLayout = {
+        rows: [["F", "P", "L", "T", "D"], ["R", "B", "G", "S", "Z"]],
+        vowels: ["E", "U"]
+      };
 
-    const keys = []; // Store key elements and their bounding boxes
-    const touches = {}; // Track active touches
+      let ws, encryptState, sendKeyEvent = null;
+      let keys = [];
+      let touches = {};
+      const width = 100, height = 100;
 
-    const key = (letter) => {
-      const element = document.createElement("div");
-      element.textContent = letter;
-      element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${height}px; text-align: center; line-height: ${height}px;`;
-      keys.push({ letter, element });
-      return element;
-    };
+      document.getElementById('connectBtn').addEventListener('click', async () => {
+        const serverAddress = document.getElementById('serverAddress').value;
+        const isLeft = document.querySelector('input[name="half"]:checked').value === 'left';
+        const connectBtn = document.getElementById('connectBtn');
+        
+        connectBtn.disabled = true;
+        try {
+          ws = new WebSocket(serverAddress);
+          ws.binaryType = 'arraybuffer';
 
-    const doubleHeight = (letter) => {
-      const element = document.createElement("div");
-      element.textContent = letter;
-      element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${2 * height + 10}px; text-align: center; line-height: ${2 * height}px;`;
-      keys.push({ letter, element });
-      return element;
-    };
+          await sodium.ready;
+          const clientKeys = sodium.crypto_kx_keypair();
 
-    const currentLayout = isLeft ? leftLayout : rightLayout;
-    const parent = document.createElement("div");
-    parent.style.cssText = "display: flex; flex-direction: row;";
-    parent.style.cssText += isLeft ? " margin-left: 110px;" : " position: absolute; right: 30px;";
+          ws.onmessage = async (event) => {
+            if (!event.data.byteLength) return;
+            
+            const data = new Uint8Array(event.data);
+            if (!encryptState) {
+              const serverPublicKey = data;
+              ws.send(clientKeys.publicKey);
 
-    const beforeStar = document.createElement("div");
-    for (const row of currentLayout.rows) {
-      for (const letter of row)
-        beforeStar.appendChild(key(letter));
-      beforeStar.appendChild(document.createElement("br"));
-    }
+              const [clientRx, clientTx] = sodium.crypto_kx_client_session_keys(
+                clientKeys.publicKey, clientKeys.privateKey, serverPublicKey
+              );
 
-    if (!isLeft) parent.appendChild(doubleHeight("*"));
-    parent.appendChild(beforeStar);
-    if (isLeft) parent.appendChild(doubleHeight("*"));
-    document.body.appendChild(parent);
+              const serverHash = sodium.to_base64(sodium.crypto_generichash(32, serverPublicKey));
+              const clientHash = sodium.to_base64(sodium.crypto_generichash(32, clientKeys.publicKey));
+              alert(`Verify fingerprints:\nServer: ${serverHash}\nClient: ${clientHash}`);
 
-    const vowels = document.createElement("div");
-    vowels.style.cssText = "position: absolute; " + (isLeft ? "bottom: 0; right: 0;" : "bottom: 0; left: 0;");
-    for (const vowel of currentLayout.vowels)
-      vowels.appendChild(key(vowel));
-    document.body.appendChild(vowels);
+              const res = sodium.crypto_secretstream_xchacha20poly1305_init_push(clientTx);
+              encryptState = res.state;
+              ws.send(res.header);
 
-    // Detect intersection between a circle and a rectangle
-    const intersects = (circle, rect) => {
-      const circleDistX = Math.abs(circle.x - rect.x - rect.width / 2);
-      const circleDistY = Math.abs(circle.y - rect.y - rect.height / 2);
+              createKeyboard(isLeft);
+              document.getElementById('connectionUI').style.display = 'none';
+              document.getElementById('keyboardContainer').style.display = 'block';
 
-      if (circleDistX > (rect.width / 2 + circle.radius) || circleDistY > (rect.height / 2 + circle.radius)) {
-        return false;
-      }
+              sendKeyEvent = (letter, type) => {
+                const eventData = sodium.from_string(JSON.stringify({
+                  letter,
+                  type,
+                  half: isLeft ? 'left' : 'right'
+                }));
+                const ciphertext = sodium.crypto_secretstream_xchacha20poly1305_push(
+                  encryptState, eventData, null, sodium.crypto_secretstream_xchacha20poly1305_TAG_MESSAGE
+                );
+                ws.send(ciphertext);
+              };
+            }
+          };
 
-      if (circleDistX <= (rect.width / 2) || circleDistY <= (rect.height / 2)) {
-        return true;
-      }
+          ws.onerror = () => connectBtn.disabled = false;
+          ws.onclose = () => connectBtn.disabled = false;
+        } catch (error) {
+          alert(error.message);
+          connectBtn.disabled = false;
+        }
+      });
 
-      const cornerDistanceSq = Math.pow(circleDistX - rect.width / 2, 2) +
-                               Math.pow(circleDistY - rect.height / 2, 2);
+      function createKeyboard(isLeft) {
+        keys = [];
+        touches = {};
+        const keyboardContainer = document.getElementById('keyboardContainer');
+        keyboardContainer.innerHTML = '';
+        
+        const currentLayout = isLeft ? leftLayout : rightLayout;
+        const parent = document.createElement("div");
+        parent.style.cssText = `display: flex; flex-direction: row; ${
+          isLeft ? "margin-left: 110px;" : "position: absolute; right: 30px;"
+        }`;
 
-      return cornerDistanceSq <= Math.pow(circle.radius, 2);
-    };
+        const key = (letter) => {
+          const element = document.createElement("div");
+          element.textContent = letter;
+          element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${height}px; text-align: center; line-height: ${height}px;`;
+          keys.push({ letter, element });
+          return element;
+        };
 
-    const updateKeyStates = () => {
-      for (const { letter, element } of keys) {
-        const rect = element.getBoundingClientRect();
-        const rectData = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+        const doubleHeight = (letter) => {
+          const element = document.createElement("div");
+          element.textContent = letter;
+          element.style.cssText = `display: inline-block; box-sizing: border-box; border: 1px solid black; margin: 5px; font-size: 32px; width: ${width}px; height: ${2 * height + 10}px; text-align: center; line-height: ${2 * height}px;`;
+          keys.push({ letter, element });
+          return element;
+        };
 
-        let pressed = false;
-        for (const touch of Object.values(touches)) {
-          const circle = { x: touch.x, y: touch.y, radius: 20 };
-          if (intersects(circle, rectData)) {
-            pressed = true;
-            break;
-          }
+        const beforeStar = document.createElement("div");
+        for (const row of currentLayout.rows) {
+          for (const letter of row) beforeStar.appendChild(key(letter));
+          beforeStar.appendChild(document.createElement("br"));
         }
 
-        if (pressed) {
-          if (!element.classList.contains("pressed")) {
-            if (navigator.vibrate) navigator.vibrate(100);
-            console.log(`${letter} pressed`);
-            element.classList.add("pressed");
-          }
-        } else {
-          if (element.classList.contains("pressed")) {
-            console.log(`${letter} released`);
-            element.classList.remove("pressed");
-          }
-        }
-      }
-    };
+        if (!isLeft) parent.appendChild(doubleHeight("*"));
+        parent.appendChild(beforeStar);
+        if (isLeft) parent.appendChild(doubleHeight("*"));
+        keyboardContainer.appendChild(parent);
 
-    document.addEventListener("touchstart", (e) => {
-      for (const touch of e.touches) {
-        touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
-      }
-      updateKeyStates();
-    });
+        const vowels = document.createElement("div");
+        vowels.style.cssText = `position: absolute; ${
+          isLeft ? "bottom: 0; right: 0;" : "bottom: 0; left: 0;"
+        }`;
+        for (const vowel of currentLayout.vowels) vowels.appendChild(key(vowel));
+        keyboardContainer.appendChild(vowels);
 
-    document.addEventListener("touchmove", (e) => {
-      for (const touch of e.touches) {
-        touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
-      }
-      updateKeyStates();
-    });
+        // Touch handling logic
+        const intersects = (circle, rect) => {
+          const circleDistX = Math.abs(circle.x - rect.x - rect.width / 2);
+          const circleDistY = Math.abs(circle.y - rect.y - rect.height / 2);
+          if (circleDistX > (rect.width / 2 + circle.radius) || circleDistY > (rect.height / 2 + circle.radius)) return false;
+          if (circleDistX <= rect.width / 2 || circleDistY <= rect.height / 2) return true;
+          return Math.pow(circleDistX - rect.width / 2, 2) + Math.pow(circleDistY - rect.height / 2, 2) <= Math.pow(circle.radius, 2);
+        };
 
-    document.addEventListener("touchend", (e) => {
-      for (const touch of e.changedTouches) {
-        delete touches[touch.identifier];
-      }
-      updateKeyStates();
-    });
+        const updateKeyStates = () => {
+          keys.forEach(({ letter, element }) => {
+            const rect = element.getBoundingClientRect();
+            const pressed = Object.values(touches).some(t => 
+              intersects({ x: t.x, y: t.y, radius: 20 }, rect)
+            );
+            
+            if (pressed && !element.classList.contains("pressed")) {
+              element.classList.add("pressed");
+              if (navigator.vibrate) navigator.vibrate(100);
+              if (sendKeyEvent) sendKeyEvent(letter, 'press');
+            } else if (!pressed && element.classList.contains("pressed")) {
+              element.classList.remove("pressed");
+              if (sendKeyEvent) sendKeyEvent(letter, 'release');
+            }
+          });
+        };
 
-    document.addEventListener("touchcancel", (e) => {
-      for (const touch of e.changedTouches) {
-        delete touches[touch.identifier];
+        // Touch event listeners
+        ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(event => {
+          document.addEventListener(event, e => {
+            if (event === 'touchstart' || event === 'touchmove') {
+              e.touches.forEach(touch => {
+                touches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+              });
+            }
+            if (event === 'touchend' || event === 'touchcancel') {
+              e.changedTouches.forEach(touch => delete touches[touch.identifier]);
+            }
+            updateKeyStates();
+            e.preventDefault();
+          }, { passive: false });
+        });
       }
-      updateKeyStates();
-    });
-
-    // Style for pressed keys
-    const style = document.createElement("style");
-    style.textContent = `.pressed { background-color: yellow; }`;
-    document.head.appendChild(style);
     </script>
   </body>
 </html>
