@@ -23,7 +23,7 @@ By doing so, you avoid relying on the server-served version of "index.html" and 
    - The project uses:
      - [libsodium-wrappers](https://www.npmjs.com/package/libsodium-wrappers)
      - [WebSocket (ws)](https://www.npmjs.com/package/ws)
-   - The `package.json` file is not shown here, but you can install dependencies with:
+   - You can install the above dependencies with:
      ```bash
      npm install
      ```
