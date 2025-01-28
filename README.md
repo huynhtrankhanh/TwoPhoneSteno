@@ -53,9 +53,9 @@ cd TwoPhoneSteno
 npm install
 ```
 
-### 3. (Optional) Create a Virtual Serial Device
+### 3. Create a Virtual Serial Device
 
-For testing and development, you can emulate a serial interface as follows:
+To connect to Plover, you can emulate a serial interface as follows:
 
 ```bash
 sudo socat -d -d pty,raw,echo=0,link=/dev/ttyS30,user=$(whoami),mode=600 UNIX-CONNECT:/tmp/wowserial
