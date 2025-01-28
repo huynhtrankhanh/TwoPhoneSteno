@@ -63,6 +63,8 @@ sudo socat -d -d pty,raw,echo=0,link=/dev/ttyS30,user=$(whoami),mode=600 UNIX-CO
 
 Adjust the paths or device names as desired.
 
+The serial interface uses the TX Bolt protocol.
+
 ### 4. Run the Server
 
 From within the project directory:
