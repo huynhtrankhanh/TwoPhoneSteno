@@ -2,8 +2,6 @@
 
 ![A steno keyboard made of two phones](image1.jpg)![Left hand spanning two phones to press some keys](image2.jpg)
 
-This document provides instructions on how to set up, run, and understand the technical aspects of the TwoPhoneSteno project. It is assumed you have some basic knowledge of Node.js and WebSocket-based applications.
-
 ---
 
 ## Important Security Note
