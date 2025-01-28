@@ -53,7 +53,21 @@ cd TwoPhoneSteno
 npm install
 ```
 
-### 3. Create a Virtual Serial Device
+### 3. Run the Server
+
+From within the project directory:
+
+```bash
+node server.js /tmp/wowserial
+```
+
+- The argument `/tmp/wowserial` should match the path used in your socat command in the next step.
+- The server will:
+  - Start an HTTP server on port 8080 serving "index.html" from the project root.
+  - Start a WebSocket server (also on port 8080) to handle real-time steno key events and encryption.
+  - Provide an interactive confirmation prompt in the terminal to either accept or reject clients.
+
+### 4. Create a Virtual Serial Device
 
 To connect to Plover, you can emulate a serial interface as follows:
 
@@ -64,20 +78,6 @@ sudo socat -d -d pty,raw,echo=0,link=/dev/ttyS30,user=$(whoami),mode=600 UNIX-CO
 Adjust the paths or device names as desired.
 
 The serial interface uses the TX Bolt protocol.
-
-### 4. Run the Server
-
-From within the project directory:
-
-```bash
-node server.js /tmp/wowserial
-```
-
-- The argument `/tmp/wowserial` should match the path used in your socat command, or a valid Unix socket path of your choice.
-- The server will:
-  - Start an HTTP server on port 8080 serving "index.html" from the project root.
-  - Start a WebSocket server (also on port 8080) to handle real-time steno key events and encryption.
-  - Provide an interactive confirmation prompt in the terminal to either accept or reject clients.
 
 ### 5. Download "index.html" and Open on Each Phone
 
