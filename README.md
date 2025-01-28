@@ -123,7 +123,7 @@ Select the correct half of the keyboard (`left` or `right`) and connect.
 
 ### Fingerprint Verification
 
-- On first connection, the server sends its public key to the client and receives the client's public key.  
+- On connection, the server sends its public key to the client and receives the client's public key.  
 - Each public key’s fingerprint is derived via `crypto_generichash` and is displayed for manual verification.  
 - Accepting the connection in the server console finalizes the secure channel.
 
