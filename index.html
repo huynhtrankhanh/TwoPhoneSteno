@@ -161,7 +161,7 @@
           keys.forEach(({ letter, element }) => {
             const rect = element.getBoundingClientRect();
             const pressed = Object.values(touches).some(t => 
-              intersects({ x: t.x, y: t.y, radius: 40 }, rect)
+              intersects({ x: t.x, y: t.y, radius: 25 }, rect)
             );
             
             if (pressed && !element.classList.contains("pressed")) {
